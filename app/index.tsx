@@ -9,7 +9,7 @@ export default function Index() {
         alignItems: "center",
       }}
     >
-      <Text className="text-red-900">Edit app/index.tsx to edit this screen.</Text>
+      <Text className="text-red-900">Bakit ang sobrang talino ko</Text>
     </View>
   );
 }
