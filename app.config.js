@@ -1,8 +1,8 @@
 import "dotenv/config";
 export default {
   expo: {
-    name: "dev-lalaba-merchant",
-    slug: "dev-lalaba-merchant",
+    name: "dev_homeglow",
+    slug: "dev_homeglow",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
@@ -30,7 +30,7 @@ export default {
 
     // iOS Configuration
     ios: {
-      bundleIdentifier: "com.yourcompany.lalabamerchant",
+      bundleIdentifier: "com.yourcompany.homeglow",
       supportsTablet: true,
       infoPlist: {
         NSCameraUsageDescription: "This app uses the camera to scan documents and capture product images",
@@ -46,7 +46,7 @@ export default {
 
     // Android Configuration
     android: {
-      package: "com.yourcompany.lalabamerchant",
+      package: "com.yourcompany.homeglow",
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#ffffff"
