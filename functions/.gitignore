@@ -7,3 +7,5 @@ venv/
 *.json
 
 *.log
+
+*.env

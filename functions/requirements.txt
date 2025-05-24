@@ -7,3 +7,6 @@ watchdog==2.1.9
 python-dotenv~=1.0.0
 firebase-admin
 pydantic
+pyrebase4
+pycryptodome
+python-dotenv
