@@ -1,3 +1,10 @@
+# Im scared to create separate files for each it might break my setup 
+# 1-22 This part of the code is more about importing libraries and loading the .env file 
+# 29-50 is about connecting the firestore database and starting the firebase admin app
+# 52-90 is for the 
+
+from urllib.parse import parse_qs, urlparse, unquote
+from starlette.datastructures import QueryParams
 from dotenv import load_dotenv
 import os
 from datetime import datetime, timedelta, timezone
@@ -20,10 +27,10 @@ import json
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Firebase
 _db = None
 _app_initialized = False
 
+# This code gets the 
 def get_db():
     global _db, _app_initialized
     if _db is None:
@@ -32,6 +39,7 @@ def get_db():
         _db = firestore.client()
     return _db
 
+#This starts my firebase admin app
 def initialize_firebase():
     global _app_initialized
     if not _app_initialized and not firebase_admin._apps:
@@ -43,7 +51,7 @@ def initialize_firebase():
             logger.error(f"Failed to initialize Firebase Admin: {e}")
             raise
 
-# Background Task Manager for Light Timeouts
+# Background task manager for light timoutss
 class LightTimeoutManager:
     def __init__(self):
         self.active_tasks: Dict[str, asyncio.Task] = {}
@@ -51,15 +59,15 @@ class LightTimeoutManager:
         self.is_running = False
         self.lock = asyncio.Lock()
     
+#THis runs on the background and checks the lights every 30 seconds 
     async def start_monitoring(self):
-        """Start the background monitoring task"""
         if not self.is_running:
             self.is_running = True
             self.monitoring_task = asyncio.create_task(self._monitor_lights())
             logger.info("Light timeout monitoring started")
-    
+
+#Stop the background light monitoring thing
     async def stop_monitoring(self):
-        """Stop the background monitoring task"""
         self.is_running = False
         if self.monitoring_task:
             self.monitoring_task.cancel()
@@ -68,28 +76,29 @@ class LightTimeoutManager:
             except asyncio.CancelledError:
                 pass
         
-        # Cancel all active timeout tasks
+# Cancel all active timeout tasks
         async with self.lock:
             for task in self.active_tasks.values():
                 task.cancel()
             self.active_tasks.clear()
         
         logger.info("Light timeout monitoring stopped")
-    
+
+#Background task that monitors all lights every 30 seconds
     async def _monitor_lights(self):
-        """Background task that monitors all lights every 30 seconds"""
+   
         while self.is_running:
             try:
                 await self._check_all_lights()
-                await asyncio.sleep(30)  # Check every 30 seconds
+                await asyncio.sleep(30)  
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Error in light monitoring: {str(e)}")
-                await asyncio.sleep(30)  # Continue monitoring even after errors
-    
+                await asyncio.sleep(30)  
+
+#Check all lights in the database and schedule turn-offs if needed
     async def _check_all_lights(self):
-        """Check all lights in the database and schedule turn-offs if needed"""
         try:
             db = get_db()
             users_ref = db.collection("users")
@@ -103,11 +112,11 @@ class LightTimeoutManager:
                 if not email:
                     continue
                 
-                # Skip if auto-timeout is disabled
+# Skip if auto-timeout is disabled
                 if not user_data.get("auto_timeout_enabled", True):
                     continue
                 
-                # Check light status
+# Check light status
                 light_ref = db.collection("users").document(user_id).collection("light").document("status")
                 light_doc = light_ref.get()
                 
@@ -117,20 +126,20 @@ class LightTimeoutManager:
                     timestamp = light_data.get("timestamp")
                     
                     if status == "ON" and timestamp:
-                        # Calculate if light should be turned off
+# Calculate if light should be turned off
                         timeout_seconds = user_data.get("light_timeout_seconds", 600)  # Default 10 minutes
                         
-                        # Handle both datetime objects and timestamps
+# Handle both datetime objects and timestamps
                         turn_on_time = ensure_timezone_aware(timestamp)
                         current_time = get_current_utc_datetime()
                         time_diff = (current_time - turn_on_time).total_seconds()
                         
                         if time_diff >= timeout_seconds:
-                            # Light should be turned off
+# Light should be turned off
                             await self._turn_off_light(email, user_id)
                             logger.info(f"Auto-turned off light for {email} after {time_diff:.1f} seconds")
                         else:
-                            # Schedule turn-off if not already scheduled
+# Schedule turn-off if not already scheduled
                             remaining_time = timeout_seconds - time_diff
                             await self.schedule_light_turnoff(email, user_id, remaining_time)
                 
@@ -138,7 +147,7 @@ class LightTimeoutManager:
             logger.error(f"Error checking all lights: {str(e)}")
     
     async def schedule_light_turnoff(self, email: str, user_id: str, delay_seconds: float):
-        """Schedule a light to be turned off after delay_seconds"""
+        #Schedule a light to be turned off after delay_seconds
         async with self.lock:
             # Cancel existing task for this user if any
             if email in self.active_tasks:
@@ -168,8 +177,8 @@ class LightTimeoutManager:
                 if email in self.active_tasks:
                     del self.active_tasks[email]
     
+# This function only turns off the light to a specific user 
     async def _turn_off_light(self, email: str, user_id: str):
-        """Turn off the light for a specific user"""
         try:
             db = get_db()
             light_ref = db.collection("users").document(user_id).collection("light").document("status")
@@ -220,7 +229,7 @@ async def shutdown_event():
     """Clean up when the app shuts down"""
     await timeout_manager.stop_monitoring()
 
-# Pydantic models
+# Data structures for the requests coming from the frontend 
 class LightCommand(BaseModel):
     email: str
     status: str
@@ -301,11 +310,11 @@ def format_timeout_display(total_seconds: int) -> str:
     
     parts = []
     if hours > 0:
-        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+        parts.append(f"{hours} hour/s")
     if minutes > 0:
-        parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+        parts.append(f"{minutes} minute/s")
     if seconds > 0:
-        parts.append(f"{seconds} second{'s' if seconds != 1 else ''}")
+        parts.append(f"{seconds} second/s")
     
     if len(parts) == 0:
         return "0 seconds"
@@ -325,7 +334,6 @@ def userSignup(data: AuthRequest):
     try:
         logger.info(f"Starting signup for: {email}")
         
-        # Use Firebase Admin to create user
         user_record = admin_auth.create_user(
             email=email,
             password=password,
@@ -339,8 +347,8 @@ def userSignup(data: AuthRequest):
         user_data = {
             "email": email,
             "username": username,
-            "light_timeout_seconds": 600,  # Default 10 minutes in seconds
-            "auto_timeout_enabled": True,   # Auto-timeout enabled by default
+            "light_timeout_seconds": 600,  
+            "auto_timeout_enabled": False,   
             "account_created": firestore.SERVER_TIMESTAMP
         }
         
@@ -513,16 +521,6 @@ def get_light_status(email: str = Query(None)):
         debug_info["status_code"] = 500
         return debug_info
 
-# Also add a simple test endpoint
-@app.get("/test-simple")
-def test_simple(email: str = Query(None)):
-    """Very simple test endpoint"""
-    return {
-        "message": "Test endpoint reached",
-        "email_received": email,
-        "email_type": str(type(email)) if email else "None",
-        "timestamp": get_current_utc_datetime().isoformat()
-    }
 
 @app.put("/light/timeout")
 async def set_light_timeout(timeout_data: TimeoutRequest):
@@ -719,22 +717,6 @@ def get_auto_timeout_status(email: str):
         logger.error(f"Error getting auto-timeout status: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/health")
-def health_check():
-    return {"status": "healthy", "timestamp": get_current_utc_datetime().isoformat()}
-
-@app.get("/debug/timeouts")
-async def debug_timeouts():
-    """Debug endpoint to see active timeout tasks"""
-    async with timeout_manager.lock:
-        active_emails = list(timeout_manager.active_tasks.keys())
-    
-    return {
-        "active_timeout_tasks": len(active_emails),
-        "emails_with_active_timeouts": active_emails,
-        "monitoring_active": timeout_manager.is_running
-    }
-
 # Firebase Functions entry point
 @https_fn.on_request(
     timeout_sec=60,    
@@ -744,6 +726,7 @@ async def debug_timeouts():
 def apiEntrypoint(request: Request) -> Response:
     try:
         from fastapi.testclient import TestClient
+        from urllib.parse import parse_qs, urlparse
         
         # Initialize Firebase early
         logger.info(f"Processing request: {request.method} {request.path}")
@@ -755,40 +738,105 @@ def apiEntrypoint(request: Request) -> Response:
         # Extract request data
         method = request.method.upper()
         path = request.path or "/"
-        query_string = request.query_string or ""
-        headers = dict(request.headers) if request.headers else {}
-        data = request.get_data() or b""
+        if path.startswith('/apiEntrypoint'):
+            path = path[len('/apiEntrypoint'):]
+        if not path or path == '/':
+            path = '/'
         
-        # Build full URL
+        # Better handling of query parameters for Firebase Functions
+        query_string = ""
+        
+        # Method 1: Try to get from request.args (Firebase Functions style)
+        if hasattr(request, 'args') and request.args:
+            query_params = []
+            for key in request.args:
+                values = request.args.getlist(key)  # Handle multiple values
+                for value in values:
+                    query_params.append(f"{key}={value}")
+            query_string = "&".join(query_params)
+            logger.info(f"Got query params from request.args: {query_string}")
+        
+        # Method 2: Try to get from request.query_string
+        elif hasattr(request, 'query_string') and request.query_string:
+            if isinstance(request.query_string, bytes):
+                query_string = request.query_string.decode('utf-8')
+            else:
+                query_string = str(request.query_string)
+            logger.info(f"Got query params from query_string: {query_string}")
+        
+        # Method 3: Try to parse from full URL
+        elif hasattr(request, 'url') and '?' in str(request.url):
+            full_url = str(request.url)
+            query_string = full_url.split('?', 1)[1]
+            logger.info(f"Got query params from full URL: {query_string}")
+        
+        # Method 4: Try to get from request.environ (WSGI style)
+        elif hasattr(request, 'environ') and 'QUERY_STRING' in request.environ:
+            query_string = request.environ['QUERY_STRING']
+            logger.info(f"Got query params from environ: {query_string}")
+        
+        headers = {}
+        if hasattr(request, 'headers'):
+            headers = dict(request.headers)
+        
+        # Get request body
+        data = b""
+        if hasattr(request, 'get_data'):
+            data = request.get_data() or b""
+        elif hasattr(request, 'data'):
+            data = request.data or b""
+        
+        # Build full URL for FastAPI
         url = path
         if query_string:
             url += f"?{query_string}"
         
+        logger.info(f"Final URL being processed: {url}")
+        logger.info(f"Method: {method}")
+        logger.info(f"Headers: {headers}")
+        
         # Make request to FastAPI app
-        if method == "GET":
-            response = client.get(url, headers=headers)
-        elif method == "POST":
-            response = client.post(url, content=data, headers=headers)
-        elif method == "PUT":
-            response = client.put(url, content=data, headers=headers)
-        else:
-            response = client.request(method, url, content=data, headers=headers)
-        
-        logger.info(f"Response status: {response.status_code}")
-        
-        return Response(
-            response=response.content,
-            status=response.status_code,
-            headers=dict(response.headers)
-        )
+        try:
+            if method == "GET":
+                response = client.get(url, headers=headers)
+            elif method == "POST":
+                response = client.post(url, content=data, headers=headers)
+            elif method == "PUT":
+                response = client.put(url, content=data, headers=headers)
+            else:
+                response = client.request(method, url, content=data, headers=headers)
+            
+            logger.info(f"FastAPI response status: {response.status_code}")
+            
+            return Response(
+                response=response.content,
+                status=response.status_code,
+                headers=dict(response.headers)
+            )
+        except Exception as fastapi_error:
+            logger.error(f"FastAPI processing error: {str(fastapi_error)}")
+            raise
         
     except Exception as e:
         logger.error(f"Error in API entrypoint: {str(e)}")
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
         
+        # Return detailed error for debugging
+        error_response = {
+            "error": f"Internal server error: {str(e)}",
+            "debug_info": {
+                "method": getattr(request, 'method', 'unknown'),
+                "path": getattr(request, 'path', 'unknown'),
+                "has_args": hasattr(request, 'args'),
+                "has_query_string": hasattr(request, 'query_string'),
+                "has_url": hasattr(request, 'url'),
+                "request_type": str(type(request))
+            }
+        }
+        
         return Response(
-            response=json.dumps({"error": f"Internal server error: {str(e)}"}),
+            response=json.dumps(error_response),
             status=500,
             headers={'Content-Type': 'application/json'}
         )
