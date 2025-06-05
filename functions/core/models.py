@@ -1,5 +1,6 @@
 from pydantic import BaseModel, validator
 from typing import Optional
+from datetime import datetime
 
 class LightCommand(BaseModel):
     email: str
