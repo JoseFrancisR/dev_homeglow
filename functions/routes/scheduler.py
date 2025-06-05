@@ -27,8 +27,6 @@ async def update_light_schedule(
     return {"message": "Schedule updated", "wake_up": wake_up, "sleep": sleep}
 
 
-#
-
 @router.get("/schedule")
 async def fetch_light_schedule(user=Depends(verify_firebase_token)):
     email = user.get("email")
