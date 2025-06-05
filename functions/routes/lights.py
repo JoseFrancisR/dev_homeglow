@@ -75,6 +75,8 @@ def get_light_status(
 
     light_ids = light_ids or ["status"]
     response = {}
+
+
     #iT loops through the light ids inside the document
     for light_id in light_ids:
         light_ref = db.collection("users").document(user_id).collection("light").document(light_id)
@@ -87,10 +89,8 @@ def get_light_status(
                 "auto_timeout_enabled": auto_timeout_enabled
             }
             continue
-
         light_data = light_doc.to_dict()
         light_data["auto_timeout_enabled"] = auto_timeout_enabled
-
         if (
             light_data.get("status") == "ON"
             and auto_timeout_enabled
@@ -109,6 +109,5 @@ def get_light_status(
             }
 
         response[light_id] = light_data
-
     return response
 

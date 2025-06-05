@@ -24,9 +24,10 @@ async def update_light_schedule(
 
     user_id = user_doc.id
     set_light_schedule(user_id, wake_up, sleep)
-
     return {"message": "Schedule updated", "wake_up": wake_up, "sleep": sleep}
 
+
+#
 
 @router.get("/schedule")
 async def fetch_light_schedule(user=Depends(verify_firebase_token)):
@@ -34,11 +35,8 @@ async def fetch_light_schedule(user=Depends(verify_firebase_token)):
     db = get_db()
     user_docs = db.collection("users").where("email", "==", email).stream()
     user_doc = next(user_docs, None)
-
     if not user_doc:
         raise HTTPException(status_code=404, detail="User not found")
-
     user_id = user_doc.id
     schedule = get_light_schedule(user_id)
-
     return {"email": email, "schedule": schedule}

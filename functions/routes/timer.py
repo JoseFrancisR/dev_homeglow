@@ -10,7 +10,7 @@ from firebase_admin import firestore
 
 router = APIRouter()
 
-# This the timer endpoint
+# This the timer endpoint updates the timer to one set by the user
 @router.put("/timer")
 async def set_light_timeout(data: TimeoutRequest, user=Depends(verify_firebase_token)):
     email = user.get("email")
@@ -42,7 +42,7 @@ async def set_light_timeout(data: TimeoutRequest, user=Depends(verify_firebase_t
         }
     }
 
-
+#  THis GET will be used to be shown in the front end application
 @router.get("/timer")
 def get_light_timeout(email: str = Query(...), user=Depends(verify_firebase_token)):
     db = get_db()
@@ -80,7 +80,7 @@ async def toggle_auto_timeout(data: AutoTimeoutToggleRequest, user=Depends(verif
     })
 
     if not data.enabled:
-        await timeout_manager.cancel_timeout(email)
+        await timeout_manager.cancel_all(email)
 
     return {
         "message": f"Auto-timeout {'enabled' if data.enabled else 'disabled'} for {email}",

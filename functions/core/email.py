@@ -35,8 +35,8 @@ Mga Sobrang Bait and Humble
             subject=subject,
             plain_text_content=message.strip(),
         )
-        sg = SendGridAPIClient(SENDGRID_API_KEY)
-        response = sg.send(email)
-        logger.info(f"Notification email sent to {to_email}: {response.status_code}")
+        sendg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sendg.send(email)
+        logger.info(f"Notification email sent to {to_email}")
     except Exception as e:
-        logger.error(f"OH NOOOOO, Failed to send notification to {to_email}: {e}")
+        logger.error(f"OH NOOOOO, Failed to send notification to {to_email}")

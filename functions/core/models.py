@@ -2,6 +2,7 @@ from pydantic import BaseModel, validator
 from typing import Optional
 from datetime import datetime
 
+#Structured data to be used for the endpoints 
 class LightCommand(BaseModel):
     email: str
     status: str
@@ -14,23 +15,23 @@ class TimeoutRequest(BaseModel):
     seconds: Optional[int] = 0
 
     @validator('hours')
-    def validate_hours(cls, v):
-        if v < 0 or v > 23:
+    def validate_hours(cls, hrs):
+        if hrs < 0 or hrs > 23:
             raise ValueError('Hours must be between 0 and 23')
-        return v
+        return hrs
 
     @validator('minutes')
-    def validate_minutes(cls, v):
-        if v < 0 or v > 59:
+    def validate_minutes(cls, min):
+        if min < 0 or min > 59:
             raise ValueError('Minutes must be between 0 and 59')
-        return v
+        return min
 
     @validator('seconds')
-    def validate_seconds(cls, v):
-        if v < 0 or v > 59:
+    def validate_seconds(cls, sec):
+        if sec < 0 or sec > 59:
             raise ValueError('Seconds must be between 0 and 59')
-        return v
-
+        return sec
+    
 class AutoTimeoutToggleRequest(BaseModel):
     email: str
     enabled: bool

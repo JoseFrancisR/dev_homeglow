@@ -10,16 +10,12 @@ import logging
 import json
 
 
-
-
-# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(title="Light Control API", docs_url=None)
 
-# Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,13 +24,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# routers where the endpoints are located 
+#Contains the endpoints of the API
 app.include_router(lights.router, prefix="/light", tags=["Light Controls"])
 app.include_router(scheduler.router, prefix="/light", tags=["Light Schedule"])
 app.include_router(timer.router, tags=["Timer"])
 app.include_router(energy_monitory.router, tags=["Energy Monitor"])
 
-# Background task startup/shutdown
 @app.on_event("startup")
 async def startup_event():
     await timeout_manager.start_monitoring()
