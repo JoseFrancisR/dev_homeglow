@@ -13,7 +13,7 @@ router = APIRouter()
 @router.post("/control")
 async def control_light(command: LightCommand, user=Depends(verify_firebase_token)):
     email = user.get("email")
-    light_id = command.light_id or "main"  
+    light_id = command.light_id or "main"
 
     if command.status not in ("ON", "OFF"):
         raise HTTPException(status_code=400, detail="Only 'ON' or 'OFF' allowed")
@@ -21,28 +21,34 @@ async def control_light(command: LightCommand, user=Depends(verify_firebase_toke
     db = get_db()
     user_docs = db.collection("users").where("email", "==", email).stream()
     user_doc = next(user_docs, None)
+
     if not user_doc:
         raise HTTPException(status_code=404, detail="User not found")
 
     user_id = user_doc.id
     user_data = user_doc.to_dict()
+
+    # Check if the light ID exists for this user
     light_ref = db.collection("users").document(user_id).collection("light").document(light_id)
+    light_doc = light_ref.get()
 
-    update_payload = {"status": command.status, "light_id": light_id}
+    if not light_doc.exists:
+        raise HTTPException(status_code=404, detail="Light ID does not exist. It must be registered by the device (Arduino).")
 
-    # Handle ON state logic
+    update_payload = {"status": command.status}
+
     if command.status == "ON":
         update_payload.update({
             "timestamp": datetime.utcnow(),
             "auto_turned_off": False,
             "notification_sent": False
         })
+        light_ref.set(update_payload, merge=True)
 
         if user_data.get("auto_timeout_enabled", True):
             timeout_seconds = user_data.get("light_timeout_seconds", 600)
             await timeout_manager.schedule_light_turnoff(email, user_id, timeout_seconds, light_id)
 
-    # Handle OFF state logic
     else:
         await timeout_manager.cancel_timeout_for_light(email, light_id)
         update_payload.update({
@@ -50,16 +56,14 @@ async def control_light(command: LightCommand, user=Depends(verify_firebase_toke
             "turned_off_at": datetime.utcnow(),
             "notification_sent": False
         })
+        light_ref.set(update_payload, merge=True)
 
-    light_ref.set(update_payload, merge=True)
-
-    return {"message": f"{email}'s light '{light_id}' set to {command.status}"}
-
+    return {"message": f"{email}'s light '{light_id}' updated to {command.status}"}\
 
 @router.get("/status")
 def get_light_status(
     email: str = Query(...),
-    light_ids: Optional[List[str]] = Query(None), 
+    light_ids: Optional[List[str]] = Query(None),
     user=Depends(verify_firebase_token)
 ):
     db = get_db()
@@ -73,11 +77,9 @@ def get_light_status(
     auto_timeout_enabled = user_data.get("auto_timeout_enabled", True)
     timeout_seconds = user_data.get("light_timeout_seconds", 600)
 
-    light_ids = light_ids or ["status"]
+    light_ids = light_ids or ["main"]
     response = {}
 
-
-    #iT loops through the light ids inside the document
     for light_id in light_ids:
         light_ref = db.collection("users").document(user_id).collection("light").document(light_id)
         light_doc = light_ref.get()
@@ -89,8 +91,10 @@ def get_light_status(
                 "auto_timeout_enabled": auto_timeout_enabled
             }
             continue
+
         light_data = light_doc.to_dict()
         light_data["auto_timeout_enabled"] = auto_timeout_enabled
+
         if (
             light_data.get("status") == "ON"
             and auto_timeout_enabled
@@ -109,5 +113,6 @@ def get_light_status(
             }
 
         response[light_id] = light_data
+
     return response
 

@@ -82,7 +82,7 @@ class LightTimeoutManager:
                         logger.info(f"Notification sent to {email} for {light_id}.")
                         light_ref.document(light_id).update({"notification_sent": True})
 
-    async def _schedule_light_turnoff(self, email: str, user_id: str, delay: float, light_id: str):
+    async def schedule_light_turnoff(self, email: str, user_id: str, delay: float, light_id: str):
         if delay <= 0 or delay > 86400:
             return
 
@@ -131,5 +131,14 @@ class LightTimeoutManager:
                     task.cancel()
                 del self.tasks[email]
                 logger.info(f"Cancelled all light tasks for {email}.")
+
+    async def cancel_timeout_for_light(self, email: str, light_id: str):
+        async with self.lock:
+            if email in self.tasks and light_id in self.tasks[email]:
+                self.tasks[email][light_id].cancel()
+                del self.tasks[email][light_id]
+                logger.info(f"Cancelled timeout for {light_id} of {email}.")
+                if not self.tasks[email]:
+                    del self.tasks[email]
 
 timeout_manager = LightTimeoutManager()

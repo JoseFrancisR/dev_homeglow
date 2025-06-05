@@ -40,3 +40,7 @@ class energy_monitoring(BaseModel):
     device_id: str
     watts: float
     timestamp: datetime
+
+class register_device_model(BaseModel):
+    device_id: str
+    nickname: str
