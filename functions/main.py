@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import lights
-from routes import scheduler, timer, energy_monitory
+from routes import scheduler, timer, energy_monitory, device_register, arduino_check
 from core.timeout_manager import timeout_manager
 from firebase_functions import https_fn
 from firebase_functions.https_fn import Request, Response
@@ -29,6 +29,8 @@ app.include_router(lights.router, prefix="/light", tags=["Light Controls"])
 app.include_router(scheduler.router, prefix="/light", tags=["Light Schedule"])
 app.include_router(timer.router, tags=["Timer"])
 app.include_router(energy_monitory.router, tags=["Energy Monitor"])
+app.include_router(device_register, tags=["Device Register"])
+app.include_router(arduino_check, tag="Arduino LED Check")
 
 @app.on_event("startup")
 async def startup_event():
