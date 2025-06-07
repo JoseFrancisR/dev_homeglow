@@ -4,10 +4,13 @@ from typing import Dict, Optional
 from core.firebase import get_db
 from core.utils import ensure_timezone_aware, get_current_utc_datetime
 from core.email import send_light_on_notification
+import pytz
 
 logger = logging.getLogger(__name__)
 
 class LightTimeoutManager:
+    WAKE_SLEEP_RUN_WINDOW_SECONDS = 60  # run wake/sleep only once per minute
+
     def __init__(self):
         self.tasks: Dict[str, Dict[str, asyncio.Task]] = {}
         self.monitor_task: Optional[asyncio.Task] = None
@@ -48,12 +51,70 @@ class LightTimeoutManager:
 
     async def _check_all_lights(self):
         db = get_db()
+        now = get_current_utc_datetime()
+
         for user_doc in db.collection("users").stream():
             user = user_doc.to_dict()
             user_id = user_doc.id
             email = user.get("email")
-            if not email or not user.get("auto_timeout_enabled", True):
+            if not email:
                 continue
+
+            ### WAKE / SLEEP ROUTINES ###
+            try:
+                schedule_ref = db.collection("users").document(user_id).collection("settings").document("light_schedule")
+                schedule_doc = schedule_ref.get()
+
+                if schedule_doc.exists:
+                    schedule = schedule_doc.to_dict()
+                    wake_up_time_str = schedule.get("wake_up")
+                    sleep_time_str = schedule.get("sleep")
+
+                    # Read last_run timestamps
+                    last_run_ref = db.collection("users").document(user_id).collection("settings").document("routine_status")
+                    last_run_doc = last_run_ref.get()
+                    last_run = last_run_doc.to_dict() if last_run_doc.exists else {}
+
+                    if wake_up_time_str:
+                        wake_up_dt = ensure_timezone_aware(now.replace(
+                            hour=int(wake_up_time_str.split(":")[0]),
+                            minute=int(wake_up_time_str.split(":")[1]),
+                            second=0,
+                            microsecond=0
+                        ))
+
+                        last_wake_run_ts = last_run.get("wake_up_last_run")
+                        if (now >= wake_up_dt and (now - wake_up_dt).total_seconds() < self.WAKE_SLEEP_RUN_WINDOW_SECONDS and
+                            (not last_wake_run_ts or (now - ensure_timezone_aware(last_wake_run_ts)).total_seconds() > 3600)):
+                            await self._turn_on_all_lights(user_id)
+                            logger.info(f"✅ Ran Wake Up routine for {email}")
+
+                            # Update last run
+                            last_run_ref.set({
+                                "wake_up_last_run": now
+                            }, merge=True)
+
+                    if sleep_time_str:
+                        sleep_dt = ensure_timezone_aware(now.replace(
+                            hour=int(sleep_time_str.split(":")[0]),
+                            minute=int(sleep_time_str.split(":")[1]),
+                            second=0,
+                            microsecond=0
+                        ))
+
+                        last_sleep_run_ts = last_run.get("sleep_last_run")
+                        if (now >= sleep_dt and (now - sleep_dt).total_seconds() < self.WAKE_SLEEP_RUN_WINDOW_SECONDS and
+                            (not last_sleep_run_ts or (now - ensure_timezone_aware(last_sleep_run_ts)).total_seconds() > 3600)):
+                            await self._turn_off_all_lights(user_id)
+                            logger.info(f"✅ Ran Sleep routine for {email}")
+
+                            # Update last run
+                            last_run_ref.set({
+                                "sleep_last_run": now
+                            }, merge=True)
+
+            except Exception as e:
+                logger.error(f"❌ Error running Wake/Sleep routine for {email}: {e}")
 
             light_ref = db.collection("users").document(user_id).collection("light")
             for light_doc in light_ref.stream():
@@ -64,7 +125,6 @@ class LightTimeoutManager:
                     continue
 
                 on_time = ensure_timezone_aware(light["timestamp"])
-                now = get_current_utc_datetime()
                 elapsed = (now - on_time).total_seconds()
 
                 timeout = user.get("light_timeout_seconds", 600)
@@ -91,6 +151,34 @@ class LightTimeoutManager:
                 if elapsed >= timeout:
                     await self._turn_off_light(email, user_id, light_id)
                     logger.info(f"✅ Auto-turned off {light_id} for {email} after {elapsed:.1f} seconds.")
+
+    async def _turn_on_all_lights(self, user_id: str):
+        db = get_db()
+        light_ref = db.collection("users").document(user_id).collection("light")
+        for light_doc in light_ref.stream():
+            light_id = light_doc.id
+            ref = light_ref.document(light_id)
+            ref.set({
+                "status": "ON",
+                "timestamp": get_current_utc_datetime(),
+                "auto_turned_off": False,
+                "notification_sent": False
+            }, merge=True)
+            logger.info(f"✅ Turned ON {light_id} for user {user_id}")
+
+    async def _turn_off_all_lights(self, user_id: str):
+        db = get_db()
+        light_ref = db.collection("users").document(user_id).collection("light")
+        for light_doc in light_ref.stream():
+            light_id = light_doc.id
+            ref = light_ref.document(light_id)
+            ref.set({
+                "status": "OFF",
+                "turned_off_at": get_current_utc_datetime(),
+                "auto_turned_off": True,
+                "notification_sent": False
+            }, merge=True)
+            logger.info(f"✅ Turned OFF {light_id} for user {user_id}")
 
     async def schedule_light_turnoff(self, email: str, user_id: str, delay: float, light_id: str):
         if delay <= 0 or delay > 86400:  # Ignore invalid delay
@@ -128,7 +216,7 @@ class LightTimeoutManager:
                     "status": "OFF",
                     "auto_turned_off": True,
                     "turned_off_at": get_current_utc_datetime(),
-                    "notification_sent": False  # Reset flag for next ON
+                    "notification_sent": False
                 }, merge=True)
                 logger.info(f"✅ {light_id} turned off for {email}.")
         except Exception as e:
@@ -151,4 +239,5 @@ class LightTimeoutManager:
                 if not self.tasks[email]:
                     del self.tasks[email]
 
+# Singleton instance
 timeout_manager = LightTimeoutManager()

@@ -1,44 +1,57 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
-from core.auth import verify_firebase_token
+from fastapi import APIRouter, Depends, HTTPException
 from core.firebase import get_db
-from core.scheduler import set_light_schedule, get_light_schedule
+from core.auth import verify_firebase_token
+from core.models import LightScheduleUpdate
 
 router = APIRouter()
 
 @router.put("/schedule")
-async def update_light_schedule(
-    wake_up: str = Query(default=None),
-    sleep: str = Query(default=None),
-    user=Depends(verify_firebase_token)
+async def update_schedule(
+    schedule: LightScheduleUpdate,
+    user_data: dict = Depends(verify_firebase_token)
 ):
-    if not wake_up and not sleep:
-        raise HTTPException(status_code=400, detail="At least one of 'wake_up' or 'sleep' must be provided")
+    # Safe extraction of user_id
+    user_id = user_data.get("uid") or user_data.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid token: no user ID found")
 
-    user_id = user["uid"]
-    email = user["email"]
+    # Always build full schedule_data (even if some fields are None)
+    schedule_data = {
+        "wake_up": schedule.wake_up,
+        "wake_up_light_id": schedule.wake_up_light_id,
+        "sleep": schedule.sleep,
+        "sleep_light_id": schedule.sleep_light_id,
+    }
+
+    # Check if at least one time field is provided
+    if schedule.wake_up is None and schedule.sleep is None:
+        raise HTTPException(status_code=400, detail="At least one of 'wake_up' or 'sleep' must be provided.")
 
     db = get_db()
     user_ref = db.collection("users").document(user_id)
-    user_doc = user_ref.get()
+    settings_ref = user_ref.collection("settings").document("light_schedule")
+    
+    # Save the full schedule object — this prevents Firestore mismatch
+    settings_ref.set({"schedule": schedule_data}, merge=True)
 
-    if not user_doc.exists:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    set_light_schedule(user_id, wake_up, sleep)
-    return {"message": "Schedule updated", "wake_up": wake_up, "sleep": sleep}
-
+    return {"message": "Schedule updated successfully."}
 
 @router.get("/schedule")
-async def fetch_light_schedule(user=Depends(verify_firebase_token)):
-    user_id = user["uid"]
-    email = user["email"]
+async def get_schedule(user_data: dict = Depends(verify_firebase_token)):
+    # Safe extraction of user_id
+    user_id = user_data.get("uid") or user_data.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid token: no user ID found")
 
     db = get_db()
     user_ref = db.collection("users").document(user_id)
-    user_doc = user_ref.get()
+    settings_ref = user_ref.collection("settings").document("light_schedule")
+    doc = settings_ref.get()
 
-    if not user_doc.exists:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Always return inner "schedule" object
+    if doc.exists:
+        schedule_data = doc.to_dict().get("schedule", {})
+    else:
+        schedule_data = {}
 
-    schedule = get_light_schedule(user_id)
-    return {"email": email, "schedule": schedule}
+    return {"schedule": schedule_data}
