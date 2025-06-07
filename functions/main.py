@@ -113,6 +113,9 @@ def apiEntrypoint(request: Request) -> Response:
             status=500,
             headers={"Content-Type": "application/json"},
         )
+    
+for route in app.routes:
+    print(route.path, route.methods)
 
 # Local test runner
 if __name__ == "__main__":

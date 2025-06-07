@@ -126,3 +126,22 @@ def get_light_status(
         response[light_id] = light_data
 
     return response
+
+@router.get("/list")
+async def list_lights(user_data: dict = Depends(verify_firebase_token)):
+    try:
+        user_id = user_data["uid"]
+
+        db = get_db()
+        # Fetch lights subcollection
+        lights_ref = db.collection("users").document(user_id).collection("light")
+        lights_docs = lights_ref.stream()
+
+        # Extract document IDs as light IDs
+        light_ids = [doc.id for doc in lights_docs]
+
+        return { "lights": light_ids }
+
+    except Exception as e:
+        print(f"Error listing lights: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list lights")
