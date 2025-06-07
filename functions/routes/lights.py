@@ -12,20 +12,24 @@ router = APIRouter()
 
 @router.post("/control")
 async def control_light(command: LightCommand, user=Depends(verify_firebase_token)):
-    email = user.get("email")
+    print("DEBUG command received:", command)
+    print("DEBUG command.dict():", command.dict())
+
+    user_id = user["uid"]
+    email = user["email"]
+
     light_id = command.light_id or "main"
 
     if command.status not in ("ON", "OFF"):
         raise HTTPException(status_code=400, detail="Only 'ON' or 'OFF' allowed")
 
     db = get_db()
-    user_docs = db.collection("users").where("email", "==", email).stream()
-    user_doc = next(user_docs, None)
+    user_ref = db.collection("users").document(user_id)
+    user_doc = user_ref.get()
 
-    if not user_doc:
+    if not user_doc.exists:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user_id = user_doc.id
     user_data = user_doc.to_dict()
 
     # Check if the light ID exists for this user
@@ -58,30 +62,37 @@ async def control_light(command: LightCommand, user=Depends(verify_firebase_toke
         })
         light_ref.set(update_payload, merge=True)
 
-    return {"message": f"{email}'s light '{light_id}' updated to {command.status}"}\
+    return {"message": f"{email}'s light '{light_id}' updated to {command.status}"}
 
 @router.get("/status")
 def get_light_status(
-    email: str = Query(...),
-    light_ids: Optional[List[str]] = Query(None),
-    user=Depends(verify_firebase_token)
+    user=Depends(verify_firebase_token),
+    light_ids: Optional[List[str]] = Query(None)
 ):
+    user_id = user["uid"]
+    email = user["email"]
+
     db = get_db()
-    users = db.collection("users").where("email", "==", email).stream()
-    user_doc = next(users, None)
-    if not user_doc:
+
+    user_ref = db.collection("users").document(user_id)
+    user_doc = user_ref.get()
+
+    if not user_doc.exists:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user_id = user_doc.id
     user_data = user_doc.to_dict()
     auto_timeout_enabled = user_data.get("auto_timeout_enabled", True)
     timeout_seconds = user_data.get("light_timeout_seconds", 600)
 
-    light_ids = light_ids or ["main"]
     response = {}
 
+    if not light_ids:
+        light_docs = user_ref.collection("light").stream()
+        light_ids = [doc.id for doc in light_docs]
+        print(f"No light_ids provided — returning all lights: {light_ids}")
+
     for light_id in light_ids:
-        light_ref = db.collection("users").document(user_id).collection("light").document(light_id)
+        light_ref = user_ref.collection("light").document(light_id)
         light_doc = light_ref.get()
 
         if not light_doc.exists:
@@ -115,4 +126,3 @@ def get_light_status(
         response[light_id] = light_data
 
     return response
-

@@ -4,7 +4,6 @@ from datetime import datetime
 
 #Structured data to be used for the endpoints 
 class LightCommand(BaseModel):
-    email: str
     status: str
     light_id: Optional[str] = None
 
@@ -36,11 +35,22 @@ class AutoTimeoutToggleRequest(BaseModel):
     email: str
     enabled: bool
 
-class energy_monitoring(BaseModel):
-    device_id: str
-    watts: float
-    timestamp: datetime
-
 class register_device_model(BaseModel):
     device_id: str
     nickname: str
+
+class EnergyMonitoring(BaseModel):
+    device_id: str
+    light_id: str
+    energy_wh: float
+    timestamp: Optional[datetime] = None  
+
+class individual_energy_monitoring(BaseModel):
+    device_id: str
+    light_id: str
+    energy_wh: float
+    timestamp: datetime = None
+
+class PairDeviceRequest(BaseModel):
+    device_id: str
+    email: str

@@ -1,6 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import Optional
-from datetime import timedelta
+from fastapi import APIRouter, HTTPException, Depends
 from core.auth import verify_firebase_token
 from core.firebase import get_db
 from core.timeout_manager import timeout_manager
@@ -10,10 +8,11 @@ from firebase_admin import firestore
 
 router = APIRouter()
 
-# This the timer endpoint updates the timer to one set by the user
 @router.put("/timer")
 async def set_light_timeout(data: TimeoutRequest, user=Depends(verify_firebase_token)):
-    email = user.get("email")
+    user_id = user["uid"]
+    email = user["email"]
+
     total_seconds = calculate_total_seconds(data.hours, data.minutes, data.seconds)
 
     if total_seconds == 0:
@@ -22,14 +21,13 @@ async def set_light_timeout(data: TimeoutRequest, user=Depends(verify_firebase_t
         raise HTTPException(status_code=400, detail="Timeout cannot exceed 24 hours")
 
     db = get_db()
-    users = db.collection("users").where("email", "==", email).stream()
-    user_doc = next(users, None)
-    if not user_doc:
+    user_ref = db.collection("users").document(user_id)
+    user_doc = user_ref.get()
+
+    if not user_doc.exists:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user_id = user_doc.id
-    user_data = user_doc.to_dict()
-    db.collection("users").document(user_id).update({
+    user_ref.update({
         "light_timeout_seconds": total_seconds,
         "timeout_updated": firestore.SERVER_TIMESTAMP
     })
@@ -42,13 +40,16 @@ async def set_light_timeout(data: TimeoutRequest, user=Depends(verify_firebase_t
         }
     }
 
-#  THis GET will be used to be shown in the front end application
 @router.get("/timer")
-def get_light_timeout(email: str = Query(...), user=Depends(verify_firebase_token)):
+def get_light_timeout(user=Depends(verify_firebase_token)):
+    user_id = user["uid"]
+    email = user["email"]
+
     db = get_db()
-    users = db.collection("users").where("email", "==", email).stream()
-    user_doc = next(users, None)
-    if not user_doc:
+    user_ref = db.collection("users").document(user_id)
+    user_doc = user_ref.get()
+
+    if not user_doc.exists:
         raise HTTPException(status_code=404, detail="User not found")
 
     user_data = user_doc.to_dict()
@@ -63,18 +64,19 @@ def get_light_timeout(email: str = Query(...), user=Depends(verify_firebase_toke
         }
     }
 
-
 @router.put("/auto-timeout")
 async def toggle_auto_timeout(data: AutoTimeoutToggleRequest, user=Depends(verify_firebase_token)):
-    email = data.email
+    user_id = user["uid"]
+    email = user["email"]
+
     db = get_db()
-    users = db.collection("users").where("email", "==", email).stream()
-    user_doc = next(users, None)
-    if not user_doc:
+    user_ref = db.collection("users").document(user_id)
+    user_doc = user_ref.get()
+
+    if not user_doc.exists:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user_id = user_doc.id
-    db.collection("users").document(user_id).update({
+    user_ref.update({
         "auto_timeout_enabled": data.enabled,
         "auto_timeout_updated": firestore.SERVER_TIMESTAMP
     })
@@ -87,16 +89,20 @@ async def toggle_auto_timeout(data: AutoTimeoutToggleRequest, user=Depends(verif
         "auto_timeout_enabled": data.enabled
     }
 
-
 @router.get("/timer_status")
-def get_auto_timeout_status(email: str = Query(...), user=Depends(verify_firebase_token)):
+def get_auto_timeout_status(user=Depends(verify_firebase_token)):
+    user_id = user["uid"]
+    email = user["email"]
+
     db = get_db()
-    users = db.collection("users").where("email", "==", email).stream()
-    user_doc = next(users, None)
-    if not user_doc:
+    user_ref = db.collection("users").document(user_id)
+    user_doc = user_ref.get()
+
+    if not user_doc.exists:
         raise HTTPException(status_code=404, detail="User not found")
 
     enabled = user_doc.to_dict().get("auto_timeout_enabled", True)
+
     return {
         "email": email,
         "auto_timeout_enabled": enabled,

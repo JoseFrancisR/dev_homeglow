@@ -14,7 +14,6 @@ def get_device_light_status(device_id: str = Query(...)):
         for light_doc in lights_ref.stream():
             light_data = light_doc.to_dict()
             if light_data.get("device_id") == device_id:
-                # collect status for all lights tied to this device
                 device_lights_ref = db.collection("users").document(user_doc.id).collection("light")
                 result = {}
                 for doc in device_lights_ref.stream():
@@ -22,5 +21,4 @@ def get_device_light_status(device_id: str = Query(...)):
                     if d.get("device_id") == device_id:
                         result[doc.id] = d.get("status", "OFF")
                 return result
-
     raise HTTPException(status_code=404, detail="Device ID not found")

@@ -1,14 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import lights
-from routes import scheduler, timer, energy_monitory, device_register, arduino_check
+from routes import scheduler, timer, energy_monitory, device_register, arduino_check, pair, device_info, notification_settings
 from core.timeout_manager import timeout_manager
 from firebase_functions import https_fn
 from firebase_functions.https_fn import Request, Response
 from fastapi.testclient import TestClient
 import logging
 import json
-
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,13 +23,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#Contains the endpoints of the API
+# Contains the endpoints of the API
 app.include_router(lights.router, prefix="/light", tags=["Light Controls"])
 app.include_router(scheduler.router, prefix="/light", tags=["Light Schedule"])
 app.include_router(timer.router, tags=["Timer"])
 app.include_router(energy_monitory.router, tags=["Energy Monitor"])
-app.include_router(device_register, tags=["Device Register"])
-app.include_router(arduino_check, tag="Arduino LED Check")
+app.include_router(device_register.router, tags=["Device Register"])
+app.include_router(arduino_check.router, tags=["Arduino LED Check"])
+app.include_router(pair.router, tags=["Device Pairing"])
+app.include_router(device_info.router, tags=["Device Info"])
+app.include_router(notification_settings.router, tags=["Notification Settings"])
+
+@app.middleware("http")
+async def log_requests(request, call_next):
+    logger.info(f"🚀 Incoming request: {request.method} {request.url}")
+    logger.info(f"Headers: {dict(request.headers)}")
+    try:
+        response = await call_next(request)
+        logger.info(f"✅ Response status: {response.status_code} for {request.url}")
+        return response
+    except Exception as e:
+        logger.error(f"❌ Exception while processing request {request.url}: {str(e)}")
+        raise e
 
 @app.on_event("startup")
 async def startup_event():
@@ -44,23 +58,23 @@ async def shutdown_event():
 @https_fn.on_request(timeout_sec=60, memory=256, max_instances=10)
 def apiEntrypoint(request: Request) -> Response:
     logger.info(f"Received request: {request.method} {request.path}")
-    #Imported this first so that the database is set up immediately
     from core.firebase import get_db
     get_db()
 
     client = TestClient(app)
 
-    # Added this because it think thats apiEntrypoint is the actual endpoint 
     method = request.method.upper()
     path = request.path or "/"
     if path.startswith("/apiEntrypoint"):
         path = path[len("/apiEntrypoint"):]
 
-    # Handle query params
+    # Safe query_string handling
     query_string = ""
     if hasattr(request, "args") and request.args:
         query_string = "&".join(
-            f"{key}={value}" for key in request.args for value in request.args.getlist(key)
+            f"{key}={str(value)}"
+            for key in request.args
+            for value in request.args.getlist(key)
         )
     elif hasattr(request, "query_string") and request.query_string:
         query_string = request.query_string.decode() if isinstance(request.query_string, bytes) else str(request.query_string)
@@ -73,7 +87,6 @@ def apiEntrypoint(request: Request) -> Response:
     data = request.get_data() if hasattr(request, "get_data") else request.data or b""
     headers = dict(request.headers) if hasattr(request, "headers") else {}
 
-    # Route the request to FastAPI
     try:
         if method == "GET":
             response = client.get(full_url, headers=headers)
@@ -86,10 +99,12 @@ def apiEntrypoint(request: Request) -> Response:
         else:
             response = client.request(method, full_url, headers=headers, content=data)
 
+        safe_headers = {k: str(v) for k, v in response.headers.items()}
+
         return Response(
             response=response.content,
             status=response.status_code,
-            headers=dict(response.headers),
+            headers=safe_headers,
         )
     except Exception as e:
         logger.error(f"FastAPI processing error: {str(e)}")
@@ -99,7 +114,7 @@ def apiEntrypoint(request: Request) -> Response:
             headers={"Content-Type": "application/json"},
         )
 
-# this is just to test it locally 
+# Local test runner
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)

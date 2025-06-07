@@ -44,7 +44,7 @@ class LightTimeoutManager:
                 await self._check_all_lights()
             except Exception as e:
                 logger.error(f"Monitoring error: {e}")
-            await asyncio.sleep(30)
+            await asyncio.sleep(30)  # Polling interval
 
     async def _check_all_lights(self):
         db = get_db()
@@ -68,22 +68,32 @@ class LightTimeoutManager:
                 elapsed = (now - on_time).total_seconds()
 
                 timeout = user.get("light_timeout_seconds", 600)
-                notify_time = user.get("light_notification_seconds", 300)
+                notify_time = light.get("notify_duration", 300)
                 notified = light.get("notification_sent", False)
 
+                # Schedule auto turn-off
+                await self.schedule_light_turnoff(email, user_id, timeout - elapsed, light_id)
+
+                # Send notification if needed
+                if not notified and elapsed >= notify_time:
+                    try:
+                        send_light_on_notification(
+                            to_email=email,
+                            username=user.get("username"),
+                            duration_minutes=int(elapsed // 60)
+                        )
+                        logger.info(f"✅ Notification sent to {email} for light {light_id}.")
+                        light_ref.document(light_id).update({"notification_sent": True})
+                    except Exception as e:
+                        logger.error(f"❌ Failed to send notification to {email} for light {light_id}: {e}")
+
+                # Auto turn OFF light if timeout exceeded
                 if elapsed >= timeout:
                     await self._turn_off_light(email, user_id, light_id)
-                    logger.info(f"Auto-turned off {light_id} for {email} after {elapsed:.1f} seconds.")
-                else:
-                    await self._schedule_light_turnoff(email, user_id, timeout - elapsed, light_id)
-
-                    if not notified and elapsed >= notify_time:
-                        send_light_on_notification(email, user.get("username"), notify_time // 60)
-                        logger.info(f"Notification sent to {email} for {light_id}.")
-                        light_ref.document(light_id).update({"notification_sent": True})
+                    logger.info(f"✅ Auto-turned off {light_id} for {email} after {elapsed:.1f} seconds.")
 
     async def schedule_light_turnoff(self, email: str, user_id: str, delay: float, light_id: str):
-        if delay <= 0 or delay > 86400:
+        if delay <= 0 or delay > 86400:  # Ignore invalid delay
             return
 
         async with self.lock:
@@ -99,11 +109,11 @@ class LightTimeoutManager:
         try:
             await asyncio.sleep(delay)
             await self._turn_off_light(email, user_id, light_id)
-            logger.info(f"{light_id} for {email} auto-turned off after delay.")
+            logger.info(f"✅ {light_id} for {email} auto-turned off after delay.")
         except asyncio.CancelledError:
-            logger.info(f"Turn-off for {light_id} was cancelled for {email}.")
+            logger.info(f"⏹️ Turn-off for {light_id} was cancelled for {email}.")
         except Exception as e:
-            logger.error(f"Error auto-turning off {light_id} for {email}: {e}")
+            logger.error(f"❌ Error auto-turning off {light_id} for {email}: {e}")
         finally:
             async with self.lock:
                 self.tasks[email].pop(light_id, None)
@@ -118,11 +128,11 @@ class LightTimeoutManager:
                     "status": "OFF",
                     "auto_turned_off": True,
                     "turned_off_at": get_current_utc_datetime(),
-                    "notification_sent": False
+                    "notification_sent": False  # Reset flag for next ON
                 }, merge=True)
-                logger.info(f"{light_id} turned off for {email}.")
+                logger.info(f"✅ {light_id} turned off for {email}.")
         except Exception as e:
-            logger.error(f"Failed to turn off {light_id} for {email}: {e}")
+            logger.error(f"❌ Failed to turn off {light_id} for {email}: {e}")
 
     async def cancel_all(self, email: str):
         async with self.lock:
