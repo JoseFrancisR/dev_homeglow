@@ -1,16 +1,31 @@
+# main.py
+
+# Setup root logger FIRST — for Cloud Functions & Cloud Run compatibility
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,  # Change to logging.DEBUG for full verbose logs
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger()  # Use root logger
+
+# Optional: force propagate for uvicorn loggers (for local + Cloud Run cases)
+uvicorn_logger = logging.getLogger("uvicorn")
+uvicorn_logger.propagate = True
+uvicorn_logger.setLevel(logging.INFO)
+
+# Now import everything else AFTER logger is configured
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import lights
 from routes import scheduler, timer, energy_monitory, device_register, arduino_check, pair, device_info, notification_settings
 from core.timeout_manager import timeout_manager
-from firebase_functions import https_fn
+from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.https_fn import Request, Response
 from fastapi.testclient import TestClient
-import logging
 import json
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from cloud.light_timeout_checker import scheduled_light_timeout_checker
+from cloud.light_wake_sleep_scheduler import scheduled_light_wake_sleep_checker
 
 # Create FastAPI app
 app = FastAPI(title="Light Control API", docs_url=None)
@@ -113,7 +128,24 @@ def apiEntrypoint(request: Request) -> Response:
             status=500,
             headers={"Content-Type": "application/json"},
         )
-    
+
+# Scheduler functions for timeout, wake/sleep, and notifications
+@scheduler_fn.on_schedule(schedule="every 1 minutes")
+def run_light_timeout_checker(event):
+    logger.info("⏰ Cloud Scheduler: Running scheduled_light_timeout_checker...")
+    import asyncio
+    asyncio.run(scheduled_light_timeout_checker())
+
+@scheduler_fn.on_schedule(schedule="every 1 minutes")
+def run_light_wake_sleep_checker(event):
+    logger.info("⏰ Cloud Scheduler: Running scheduled_light_wake_sleep_checker...")
+    import asyncio
+    try:
+        asyncio.run(scheduled_light_wake_sleep_checker())
+    except Exception as e:
+        logger.error(f"❌ Exception in scheduled_light_wake_sleep_checker: {e}", exc_info=True)
+
+# Debug print all routes
 for route in app.routes:
     print(route.path, route.methods)
 

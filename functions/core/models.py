@@ -9,7 +9,6 @@ class LightCommand(BaseModel):
     light_id: Optional[str] = None
 
 class TimeoutRequest(BaseModel):
-    email: str
     hours: Optional[int] = 0
     minutes: Optional[int] = 0
     seconds: Optional[int] = 0
@@ -36,8 +35,7 @@ class TimeoutRequest(BaseModel):
         return sec
 
 class AutoTimeoutToggleRequest(BaseModel):
-    email: str
-    enabled: bool
+    auto_timeout_enabled: bool
 
 class register_device_model(BaseModel):
     device_id: str

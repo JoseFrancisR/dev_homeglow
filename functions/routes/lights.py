@@ -3,10 +3,11 @@ from core.auth import verify_firebase_token
 from core.firebase import get_db
 from core.models import LightCommand
 from core.timeout_manager import timeout_manager
-from core.utils import get_current_utc_datetime
+from core.utils import get_current_utc_datetime, ensure_timezone_aware
 from typing import List, Optional
 from datetime import datetime, timedelta
-from core.utils import ensure_timezone_aware
+from firebase_admin import firestore
+
 
 router = APIRouter()
 
@@ -47,18 +48,23 @@ async def control_light(command: LightCommand, user=Depends(verify_firebase_toke
             "auto_turned_off": False,
             "notification_sent": False
         })
-        light_ref.set(update_payload, merge=True)
 
         if user_data.get("auto_timeout_enabled", True):
             timeout_seconds = user_data.get("light_timeout_seconds", 600)
+            deadline = get_current_utc_datetime() + timedelta(seconds=timeout_seconds)
+            update_payload["light_timeout_deadline"] = deadline
+
             await timeout_manager.schedule_light_turnoff(email, user_id, timeout_seconds, light_id)
+
+        light_ref.set(update_payload, merge=True)
 
     else:
         await timeout_manager.cancel_timeout_for_light(email, light_id)
         update_payload.update({
             "manually_turned_off": True,
             "turned_off_at": datetime.utcnow(),
-            "notification_sent": False
+            "notification_sent": False,
+            "light_timeout_deadline": firestore.DELETE_FIELD  # clear the deadline when OFF
         })
         light_ref.set(update_payload, merge=True)
 

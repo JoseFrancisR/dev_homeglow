@@ -23,8 +23,7 @@ async def update_schedule(
         "wake_up_light_id": schedule.wake_up_light_id,
         "sleep_light_id": schedule.sleep_light_id,
     }
-
-    # Only save non-None fields
+    
     schedule_data = {k: v for k, v in schedule_data.items() if v is not None}
 
     # If no fields are provided → return error
@@ -40,7 +39,6 @@ async def update_schedule(
 
 @router.get("/schedule")
 async def get_schedule(user_data: dict = Depends(verify_firebase_token)):
-    # Safe extraction of user_id from token
     user_id = user_data.get("uid") or user_data.get("sub")
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid token: no user ID found")
@@ -51,8 +49,8 @@ async def get_schedule(user_data: dict = Depends(verify_firebase_token)):
     doc = settings_ref.get()
 
     if doc.exists:
-        schedule_data = doc.to_dict()
+        schedule_data = doc.to_dict().get("schedule", {})
     else:
         schedule_data = {}
 
-    return schedule_data
+    return {"schedule": schedule_data}

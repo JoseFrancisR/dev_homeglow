@@ -4,7 +4,6 @@ from typing import Dict, Optional
 from core.firebase import get_db
 from core.utils import ensure_timezone_aware, get_current_utc_datetime
 from core.email import send_light_on_notification
-import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +59,12 @@ class LightTimeoutManager:
             if not email:
                 continue
 
+            # Skip if auto_timeout_enabled is False
+            auto_timeout_enabled = user.get("auto_timeout_enabled", True)
+            if not auto_timeout_enabled:
+                logger.debug(f"[Monitor] Skipping user {email} because auto_timeout_enabled is FALSE.")
+                continue
+
             ### WAKE / SLEEP ROUTINES ###
             try:
                 schedule_ref = db.collection("users").document(user_id).collection("settings").document("light_schedule")
@@ -89,7 +94,6 @@ class LightTimeoutManager:
                             await self._turn_on_all_lights(user_id)
                             logger.info(f"✅ Ran Wake Up routine for {email}")
 
-                            # Update last run
                             last_run_ref.set({
                                 "wake_up_last_run": now
                             }, merge=True)
@@ -108,7 +112,6 @@ class LightTimeoutManager:
                             await self._turn_off_all_lights(user_id)
                             logger.info(f"✅ Ran Sleep routine for {email}")
 
-                            # Update last run
                             last_run_ref.set({
                                 "sleep_last_run": now
                             }, merge=True)
@@ -116,6 +119,7 @@ class LightTimeoutManager:
             except Exception as e:
                 logger.error(f"❌ Error running Wake/Sleep routine for {email}: {e}")
 
+            # Check lights
             light_ref = db.collection("users").document(user_id).collection("light")
             for light_doc in light_ref.stream():
                 light = light_doc.to_dict()
@@ -184,6 +188,18 @@ class LightTimeoutManager:
         if delay <= 0 or delay > 86400:  # Ignore invalid delay
             return
 
+        # Check auto_timeout_enabled flag before scheduling
+        db = get_db()
+        user_ref = db.collection("users").document(user_id)
+        user_doc = user_ref.get()
+
+        auto_timeout_enabled = user_doc.to_dict().get("auto_timeout_enabled", True)
+
+        if not auto_timeout_enabled:
+            logger.info(f"[TimeoutManager] Skipping scheduling turn-off for {light_id} — auto_timeout_enabled is FALSE.")
+            return
+
+        # Proceed with scheduling
         async with self.lock:
             self.tasks.setdefault(email, {})
             if light_id in self.tasks[email]:
