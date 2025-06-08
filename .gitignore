@@ -69,3 +69,5 @@ node_modules/
 .dataconnect
 
 .gitignore
+
+functions/serviceAccountKey.json

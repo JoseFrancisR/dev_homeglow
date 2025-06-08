@@ -9,7 +9,7 @@ import pytz
 logger = logging.getLogger(__name__)
 
 # Timezone (Asia/Manila)
-USER_TIMEZONE = pytz.timezone("Asia/Manila")  # UTC+8
+USER_TIMEZONE = pytz.timezone("Asia/Manila")  
 
 # Helpers
 def get_current_user_local_time():
@@ -49,7 +49,7 @@ async def scheduled_light_wake_sleep_checker():
         settings_doc = settings_ref.get()
 
         if not settings_doc.exists:
-            continue  # Skip users without light_schedule
+            continue  
 
         settings_data = settings_doc.to_dict()
         schedule = settings_data.get("schedule", {})
@@ -79,11 +79,11 @@ async def scheduled_light_wake_sleep_checker():
                             "wake_up_last_triggered_at": today_date_str
                         })
 
-                        logger.info(f"[WakeSleepChecker] ✅ Light {wake_up_light_id} turned ON.")
+                        logger.info(f"[WakeSleepChecker] Light {wake_up_light_id} turned ON.")
                     except Exception as e:
-                        logger.error(f"[WakeSleepChecker] ❌ Failed to turn ON light {wake_up_light_id}: {e}")
+                        logger.error(f"[WakeSleepChecker]  Failed to turn ON light {wake_up_light_id}: {e}")
 
-        # Process Sleep trigger
+        # It process Sleep trigger
         if sleep_time and sleep_light_id:
             if time_matches(sleep_time, local_now):
                 if sleep_last_triggered_at != today_date_str:
@@ -100,8 +100,8 @@ async def scheduled_light_wake_sleep_checker():
                             "sleep_last_triggered_at": today_date_str
                         })
 
-                        logger.info(f"[WakeSleepChecker] ✅ Light {sleep_light_id} turned OFF.")
+                        logger.info(f"[WakeSleepChecker] Light {sleep_light_id} turned OFF.")
                     except Exception as e:
-                        logger.error(f"[WakeSleepChecker] ❌ Failed to turn OFF light {sleep_light_id}: {e}")
+                        logger.error(f"[WakeSleepChecker]  Failed to turn OFF light {sleep_light_id}: {e}")
 
     logger.info("[WakeSleepChecker] Checker run complete.")

@@ -2,11 +2,7 @@ import os
 import logging
 import smtplib
 from email.mime.text import MIMEText
-from dotenv import load_dotenv
 
-load_dotenv()
-
-# Optional: Import SendGrid if available
 try:
     from sendgrid import SendGridAPIClient
     from sendgrid.helpers.mail import Mail
@@ -50,10 +46,10 @@ Mga Sobrang Bait and Humble
             )
             sendg = SendGridAPIClient(SENDGRID_API_KEY)
             response = sendg.send(email)
-            logger.info(f"✅ Notification email sent to {to_email} via SendGrid.")
+            logger.info(f" Notification email sent to {to_email} via SendGrid.")
             return
         except Exception as e:
-            logger.error(f"❌ Failed to send email to {to_email} via SendGrid: {e}")
+            logger.error(f" Failed to send email to {to_email} via SendGrid: {e}")
 
     # Fallback to SMTP
     if SMTP_SERVER and SMTP_USERNAME and SMTP_PASSWORD:
@@ -68,9 +64,9 @@ Mga Sobrang Bait and Humble
                 server.login(SMTP_USERNAME, SMTP_PASSWORD)
                 server.sendmail(FROM_EMAIL, [to_email], msg.as_string())
 
-            logger.info(f"✅ Notification email sent to {to_email} .")
+            logger.info(f" Notification email sent to {to_email} .")
             return
         except Exception as e:
-            logger.error(f"❌ Failed to send email to {to_email} via SMTP: {e}")
+            logger.error(f" Failed to send email to {to_email} via SMTP: {e}")
 
-    logger.error(f"🚫 No email method configured properly. Could not send email to {to_email}.")
+    logger.error(f" No email method configured properly. Could not send email to {to_email}.")
